@@ -16,13 +16,11 @@ LAST_VIDEO_FILE = "last_video_id.txt"
 
 def get_healthy_invidious_instance():
     """Obtiene una instancia pública y saludable de Invidious al azar."""
-    try {
+    try:
         print("Obteniendo lista de servidores Invidious saludables...")
-        # Llama a la API oficial para obtener una lista de instancias
         instances_res = requests.get("https://api.invidious.io/instances.json?sort_by=health", timeout=15)
         instances = instances_res.json()
         
-        # Filtra solo las que tienen API pública y están disponibles
         healthy_instances = [
             instance[1] for instance in instances 
             if instance[1].get("api") and instance[1].get("type") == "https"
@@ -30,38 +28,34 @@ def get_healthy_invidious_instance():
         
         if not healthy_instances:
             print("No se encontraron servidores saludables, usando uno de respaldo.")
-            return "https://invidious.io.lol" # Un servidor de respaldo conocido
+            return "https://invidious.io.lol"
 
-        # Elige una instancia al azar de la lista
         chosen_instance = random.choice(healthy_instances)
         instance_uri = chosen_instance.get("uri")
         print(f"Servidor elegido: {instance_uri}")
         return instance_uri
-    } catch (Exception e) {
+    except Exception as e:
         print(f"Error al obtener la lista de servidores: {e}. Usando uno de respaldo.")
-        return "https://invidious.io.lol" # En caso de que la API de listado falle
-    }
+        return "https://invidious.io.lol"
 
 def get_last_processed_video_id():
-    try {
+    try:
         with open(LAST_VIDEO_FILE, "r") as f:
             return f.read().strip()
-    } catch (FileNotFoundError) {
+    except FileNotFoundError:
         return None
-    }
 
 def save_last_processed_video_id(video_id):
     with open(LAST_VIDEO_FILE, "w") as f:
         f.write(video_id)
 
 def get_video_transcript(video_id):
-    try {
+    try:
         transcript_list = YouTubeTranscriptApi.get_transcript(video_id, languages=['en', 'es'])
         return " ".join([item['text'] for item in transcript_list])
-    } catch (Exception e) {
+    except Exception as e:
         print(f"Error al obtener la transcripción: {e}")
         return None
-    }
 
 def summarize_text(text):
     api_url = "https://api-inference.huggingface.co/models/facebook/bart-large-cnn"
@@ -76,15 +70,14 @@ def summarize_text(text):
         min_length = max(20, max_length // 2)
 
         payload = { "inputs": chunk, "parameters": { "max_length": int(max_length), "min_length": int(min_length), "do_sample": False } }
-        try {
+        try:
             response = requests.post(api_url, headers=headers, json=payload, timeout=120)
             if response.status_code == 200:
                 summary_chunks.append(response.json()[0]['summary_text'])
             else:
                 print(f"Error en la API de Hugging Face: {response.text}")
-        } catch (Exception e) {
+        except Exception as e:
             print(f"Error al contactar Hugging Face: {e}")
-        }
 
     return " ".join(summary_chunks) if summary_chunks else "No se pudo generar el resumen."
 
@@ -98,11 +91,10 @@ def send_telegram_message(message):
 def main():
     print("Iniciando la revisión de nuevos videos...")
     
-    # Elige un servidor de Invidious al azar
     invidious_instance_url = get_healthy_invidious_instance()
     rss_feed_url = f"{invidious_instance_url}/feeds/videos.xml?channel_id={YOUTUBE_CHANNEL_ID}"
     
-    try {
+    try:
         print(f"Obteniendo feed desde: {rss_feed_url}")
         response = requests.get(rss_feed_url, timeout=15)
         
@@ -112,7 +104,7 @@ def main():
 
         feed = feedparser.parse(response.content)
 
-    } catch (requests.exceptions.RequestException e) {
+    except requests.exceptions.RequestException as e:
         print(f"Error al hacer la solicitud HTTP: {e}")
         return
     
@@ -151,9 +143,8 @@ def main():
             print("¡Proceso completado con éxito!")
         else:
             print("No se pudo obtener la transcripción. No se enviará resumen.")
-    } else {
+    else:
         print("No hay videos nuevos.")
-    }
 
 if __name__ == "__main__":
     main()
