@@ -40,28 +40,36 @@ def summarize_text(text):
     api_url = "https://api-inference.huggingface.co/models/facebook/bart-large-cnn"
     headers = {"Authorization": f"Bearer {HUGGINGFACE_API_KEY}"} if HUGGINGFACE_API_KEY else {}
 
-    max_length = len(text) // 4
-    min_length = max(50, max_length // 2)
+    # Acortamos el texto si es muy largo para evitar errores
+    max_chunk_size = 1024 # Modelos como BART tienen un límite de tokens
+    text_chunks = [text[i:i+max_chunk_size] for i in range(0, len(text), max_chunk_size)]
+    
+    summary_chunks = []
+    for chunk in text_chunks:
+        max_length = len(chunk.split()) // 3
+        min_length = max(20, max_length // 2)
 
-    payload = {
-        "inputs": text,
-        "parameters": {
-            "max_length": int(max_length),
-            "min_length": int(min_length),
-            "do_sample": False
+        payload = {
+            "inputs": chunk,
+            "parameters": {
+                "max_length": int(max_length),
+                "min_length": int(min_length),
+                "do_sample": False
+            }
         }
-    }
+        try:
+            response = requests.post(api_url, headers=headers, json=payload, timeout=120)
+            if response.status_code == 200:
+                summary_chunks.append(response.json()[0]['summary_text'])
+            else:
+                print(f"Error en la API de Hugging Face: {response.text}")
+        except Exception as e:
+            print(f"Error al contactar Hugging Face: {e}")
 
-    try:
-        response = requests.post(api_url, headers=headers, json=payload, timeout=120)
-        if response.status_code == 200:
-            return response.json()[0]['summary_text']
-        else:
-            print(f"Error en la API de Hugging Face: {response.text}")
-            return "No se pudo generar el resumen."
-    except Exception as e:
-        print(f"Error al contactar Hugging Face: {e}")
-        return "Error de conexión al generar el resumen."
+    if summary_chunks:
+        return " ".join(summary_chunks)
+    else:
+        return "No se pudo generar el resumen."
 
 
 def send_telegram_message(message):
@@ -78,7 +86,11 @@ def send_telegram_message(message):
 
 def main():
     print("Iniciando la revisión de nuevos videos...")
-    feed = feedparser.parse(YOUTUBE_RSS_URL)
+    
+    # --- THIS IS THE FIX ---
+    # We add a common browser user-agent to avoid being blocked by YouTube
+    feed = feedparser.parse(YOUTUBE_RSS_URL, agent='Mozilla/5.0')
+    # ----------------------
     
     if not feed.entries:
         print("El feed no contiene videos. Saliendo.")
