@@ -8,6 +8,11 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    
+    # --- ADD THIS SECTION ---
+    permissions:
+      contents: write
+    # -----------------------
 
     steps:
       - name: Checkout repository
