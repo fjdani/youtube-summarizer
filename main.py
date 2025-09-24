@@ -1,0 +1,42 @@
+name: YouTube Video Summarizer
+
+on:
+  schedule:
+    # Ejecuta el script cada hora
+    - cron: "0 * * * *"
+  workflow_dispatch:
+    # Permite ejecutarlo manualmente desde la pestaña de Actions
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run script
+        env:
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          HUGGINGFACE_API_KEY: ${{ secrets.HUGGINGFACE_API_KEY }}
+        run: python main.py
+
+      - name: Commit and push changes
+        run: |
+          git config --global user.name 'github-actions'
+          git config --global user.email 'github-actions@github.com'
+          git add last_video_id.txt
+          # Solo hace commit si hay cambios en el archivo
+          git diff --quiet && git diff --staged --quiet || git commit -m "Update last processed video ID"
+          git push
