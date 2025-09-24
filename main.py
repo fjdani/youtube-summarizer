@@ -8,8 +8,8 @@ TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
 TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
 HUGGINGFACE_API_KEY = os.environ.get("HUGGINGFACE_API_KEY")
 
-# --- ESTA ES LA URL CORREGIDA ---
-YOUTUBE_RSS_URL = "https://www.youtube.com/feeds/videos.xml?playlist_id=UURvqjQP_of_v2ubqXN-e2wQ"
+# --- URL FINAL USANDO UN INTERMEDIARIO (INVIDIOUS) ---
+YOUTUBE_RSS_URL = "https://yewtu.be/feeds/videos.xml?channel_id=UCRvqjQP_of_v2ubqXN-e2wQ"
 LAST_VIDEO_FILE = "last_video_id.txt"
 
 # --- FUNCIONES ---
@@ -70,17 +70,13 @@ def send_telegram_message(message):
 def main():
     print("Iniciando la revisión de nuevos videos...")
     
-    headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.36',
-    }
-    
     try:
         print(f"Obteniendo feed desde: {YOUTUBE_RSS_URL}")
-        response = requests.get(YOUTUBE_RSS_URL, headers=headers, timeout=15)
+        # Usamos un request simple, ya que Invidious no debería bloquearnos.
+        response = requests.get(YOUTUBE_RSS_URL, timeout=15)
         
         if response.status_code != 200:
             print(f"Error: La solicitud no fue exitosa. Status: {response.status_code}")
-            print(f"Response Content: {response.text[:500]}")
             return
 
         feed = feedparser.parse(response.content)
@@ -94,7 +90,8 @@ def main():
         return
 
     latest_video = feed.entries[0]
-    latest_video_id = latest_video.yt_videoid
+    # El ID del video se encuentra en un campo diferente en el feed de Invidious
+    latest_video_id = latest_video.get('yt_videoid', latest_video.get('id', '').split(':')[-1])
     
     last_processed_id = get_last_processed_video_id()
     
