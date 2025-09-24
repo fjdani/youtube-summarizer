@@ -8,10 +8,11 @@ TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
 TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
 HUGGINGFACE_API_KEY = os.environ.get("HUGGINGFACE_API_KEY")
 
-YOUTUBE_RSS_URL = "https://www.youtube.com/feeds/videos.xml?channel_id=UCRvqjQP_of_v2ubqXN-e2wQ"
+# --- ESTA ES LA URL CORREGIDA ---
+YOUTUBE_RSS_URL = "https://www.youtube.com/feeds/videos.xml?playlist_id=UURvqjQP_of_v2ubqXN-e2wQ"
 LAST_VIDEO_FILE = "last_video_id.txt"
 
-# --- FUNCIONES (sin cambios) ---
+# --- FUNCIONES ---
 
 def get_last_processed_video_id():
     try:
@@ -64,39 +65,32 @@ def send_telegram_message(message):
     payload = { 'chat_id': TELEGRAM_CHAT_ID, 'text': message, 'parse_mode': 'Markdown' }
     requests.post(url, json=payload)
 
-# --- LÓGICA PRINCIPAL (MODIFICADA) ---
+# --- LÓGICA PRINCIPAL ---
 
 def main():
     print("Iniciando la revisión de nuevos videos...")
     
-    # --- NUEVA SECCIÓN DE DIAGNÓSTICO ---
     headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.36',
-        'Accept-Language': 'en-US,en;q=0.5'
     }
     
     try:
         print(f"Obteniendo feed desde: {YOUTUBE_RSS_URL}")
         response = requests.get(YOUTUBE_RSS_URL, headers=headers, timeout=15)
         
-        # Imprimimos diagnósticos clave
-        print(f"Status Code: {response.status_code}")
-        print(f"Response Content (primeros 500 caracteres): {response.text[:500]}")
-
         if response.status_code != 200:
-            print("Error: La solicitud no fue exitosa.")
+            print(f"Error: La solicitud no fue exitosa. Status: {response.status_code}")
+            print(f"Response Content: {response.text[:500]}")
             return
 
-        # Pasamos el contenido a feedparser
         feed = feedparser.parse(response.content)
 
     except requests.exceptions.RequestException as e:
         print(f"Error al hacer la solicitud HTTP: {e}")
         return
-    # --- FIN DE LA NUEVA SECCIÓN ---
     
     if not feed.entries:
-        print("El feed no contiene videos. Saliendo.")
+        print("El feed fue leído pero no contiene videos. Saliendo.")
         return
 
     latest_video = feed.entries[0]
@@ -104,11 +98,11 @@ def main():
     
     last_processed_id = get_last_processed_video_id()
     
-    print(f"Último video en el feed: {latest_video_id}")
+    print(f"Último video en el feed: {latest_video.title} ({latest_video_id})")
     print(f"Último video procesado: {last_processed_id}")
 
     if latest_video_id != last_processed_id:
-        print(f"¡Nuevo video detectado! Título: {latest_video.title}")
+        print(f"¡Nuevo video detectado!")
         
         transcript = get_video_transcript(latest_video_id)
         
