@@ -12,31 +12,7 @@ HUGGINGFACE_API_KEY = os.environ.get("HUGGINGFACE_API_KEY")
 YOUTUBE_CHANNEL_ID = "UCRvqjQP_of_v2ubqXN-e2wQ"
 LAST_VIDEO_FILE = "last_video_id.txt"
 
-# --- FUNCIONES ---
-
-def get_healthy_invidious_instance():
-    """Obtiene una instancia pública y saludable de Invidious al azar."""
-    try:
-        print("Obteniendo lista de servidores Invidious saludables...")
-        instances_res = requests.get("https://api.invidious.io/instances.json?sort_by=health", timeout=15)
-        instances = instances_res.json()
-        
-        healthy_instances = [
-            instance[1] for instance in instances 
-            if instance[1].get("api") and instance[1].get("type") == "https"
-        ]
-        
-        if not healthy_instances:
-            print("No se encontraron servidores saludables, usando uno de respaldo.")
-            return "https://invidious.io.lol"
-
-        chosen_instance = random.choice(healthy_instances)
-        instance_uri = chosen_instance.get("uri")
-        print(f"Servidor elegido: {instance_uri}")
-        return instance_uri
-    except Exception as e:
-        print(f"Error al obtener la lista de servidores: {e}. Usando uno de respaldo.")
-        return "https://invidious.io.lol"
+# --- FUNCIONES (Simplificadas) ---
 
 def get_last_processed_video_id():
     try:
@@ -91,25 +67,34 @@ def send_telegram_message(message):
 def main():
     print("Iniciando la revisión de nuevos videos...")
     
-    invidious_instance_url = get_healthy_invidious_instance()
-    rss_feed_url = f"{invidious_instance_url}/feeds/videos.xml?channel_id={YOUTUBE_CHANNEL_ID}"
+    # Lista curada de servidores Invidious. Si uno falla, probará el siguiente.
+    instance_list = [
+        "https://invidious.no-logs.org",
+        "https://vid.puffyan.us",
+        "https://invidious.incogniweb.net",
+        "https://invidious.protokolla.fi",
+        "https://yewtu.be"
+    ]
+    random.shuffle(instance_list) # Mezclamos para distribuir la carga
     
-    try:
-        print(f"Obteniendo feed desde: {rss_feed_url}")
-        response = requests.get(rss_feed_url, timeout=15)
-        
-        if response.status_code != 200:
-            print(f"Error: La solicitud no fue exitosa. Status: {response.status_code}")
-            return
-
-        feed = feedparser.parse(response.content)
-
-    except requests.exceptions.RequestException as e:
-        print(f"Error al hacer la solicitud HTTP: {e}")
-        return
+    feed = None
+    for instance_url in instance_list:
+        rss_feed_url = f"{instance_url}/feeds/videos.xml?channel_id={YOUTUBE_CHANNEL_ID}"
+        try:
+            print(f"Intentando obtener feed desde: {rss_feed_url}")
+            response = requests.get(rss_feed_url, timeout=15)
+            
+            if response.status_code == 200:
+                print("¡Feed obtenido con éxito!")
+                feed = feedparser.parse(response.content)
+                break # Salimos del bucle si tenemos éxito
+            else:
+                print(f"El servidor devolvió el estado: {response.status_code}. Intentando con el siguiente.")
+        except requests.exceptions.RequestException as e:
+            print(f"El servidor falló: {e}. Intentando con el siguiente.")
     
-    if not feed.entries:
-        print("El feed fue leído pero no contiene videos. Saliendo.")
+    if not feed or not feed.entries:
+        print("Todos los servidores fallaron o el feed está vacío. Saliendo.")
         return
 
     latest_video = feed.entries[0]
