@@ -2,10 +2,8 @@ name: YouTube Video Summarizer
 
 on:
   schedule:
-    # Ejecuta el script cada hora
     - cron: "0 * * * *"
   workflow_dispatch:
-    # Permite ejecutarlo manualmente desde la pestaña de Actions
 
 jobs:
   build:
@@ -29,6 +27,13 @@ jobs:
           pip cache purge
           pip install --no-cache-dir -r requirements.txt
 
+      - name: Verify installed packages
+        run: |
+          echo "--- Contents of requirements.txt ---"
+          cat requirements.txt
+          echo "--- Packages installed by pip ---"
+          pip freeze
+
       - name: Run script
         env:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
@@ -42,6 +47,5 @@ jobs:
           git config --global user.name 'github-actions'
           git config --global user.email 'github-actions@github.com'
           git add last_video_id.txt
-          # Solo hace commit si hay cambios en el archivo
           git diff --quiet && git diff --staged --quiet || git commit -m "Update last processed video ID"
           git push
