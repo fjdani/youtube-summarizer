@@ -89,4 +89,47 @@ def main():
     print("Checking for new videos...")
     print("Fetching feed from RSS.app URL...")
 
-    response = requests.get(RSS_FEED_URL
+    response = requests.get(RSS_FEED_URL)
+    feed = feedparser.parse(response.content)
+    
+    if not feed.entries:
+        print("Feed does not contain any videos. Exiting.")
+        return
+
+    latest_video = feed.entries[0]
+    # Extract the video ID from the link
+    latest_video_id = latest_video.link.split('v=')[-1]
+    
+    last_processed_id = get_last_processed_video_id()
+    
+    print(f"Latest video in feed: {latest_video.title} ({latest_video_id})")
+    print(f"Last processed video: {last_processed_id}")
+
+    if latest_video_id != last_processed_id:
+        print("New video detected!")
+        
+        transcript = get_video_transcript(video_id=latest_video_id)
+        
+        if transcript:
+            print("Generating summary...")
+            summary = summarize_text(transcript)
+            
+            message = (
+                f"🚀 *New Video on Into The Cryptoverse!*\n\n"
+                f"*{latest_video.title}*\n\n"
+                f"📝 *AI Summary:*\n{summary}\n\n"
+                f"🔗 [Watch Video]({latest_video.link})"
+            )
+            
+            print("Sending message to Telegram...")
+            send_telegram_message(message)
+            
+            save_last_processed_video_id(latest_video_id)
+            print("Process completed successfully!")
+        else:
+            print("Could not get transcript. No summary will be sent.")
+    else:
+        print("No new videos found.")
+
+if __name__ == "__main__":
+    main()
