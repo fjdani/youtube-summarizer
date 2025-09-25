@@ -3,6 +3,7 @@ import re
 import requests
 import feedparser
 import yt_dlp
+import random
 
 # --- CONFIGURATION ---
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
@@ -28,63 +29,80 @@ def save_last_processed_video_id(video_id):
         f.write(video_id)
 
 def get_video_transcript(video_id):
-    """Gets the transcript using the robust yt-dlp library."""
-    print("Fetching transcript with yt-dlp...")
-    # Use a unique filename for the transcript
-    output_template = f"{video_id}.vtt"
+    """Gets the transcript using yt-dlp routed through a public Invidious instance."""
+    print("Attempting to fetch transcript via Invidious instances...")
     
-    ydl_opts = {
-        'writeautomaticsub': True,
-        'subtitleslangs': ['en', 'es'],
-        'subtitlesformat': 'vtt',
-        'skip_download': True,
-        'outtmpl': output_template.replace('.vtt', ''), # yt-dlp adds the lang and extension
-        'quiet': True,
-    }
-    
-    transcript_file = None
-    try:
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            ydl.download([f'https://www.youtube.com/watch?v={video_id}'])
+    # Curated list of public Invidious instances
+    instance_list = [
+        "https://invidious.no-logs.org",
+        "https://vid.puffyan.us",
+        "https://invidious.incogniweb.net",
+        "https://yewtu.be",
+        "https://invidious.protokolla.fi"
+    ]
+    random.shuffle(instance_list)
+
+    for instance in instance_list:
+        print(f"Trying instance: {instance}")
+        # Use a unique filename for the transcript
+        output_template = f"{video_id}.vtt"
         
-        # Find the downloaded file (e.g., video_id.en.vtt)
-        for lang in ['en', 'es']:
-            expected_file = f"{video_id}.{lang}.vtt"
-            if os.path.exists(expected_file):
-                transcript_file = expected_file
-                break
+        ydl_opts = {
+            'writeautomaticsub': True,
+            'subtitleslangs': ['en', 'es'],
+            'subtitlesformat': 'vtt',
+            'skip_download': True,
+            'outtmpl': output_template.replace('.vtt', ''),
+            'quiet': True,
+            'no_warnings': True,
+        }
         
-        if not transcript_file:
-            print("Transcript file was not downloaded by yt-dlp.")
-            return None
-        
-        # Read and parse the VTT file
-        with open(transcript_file, 'r', encoding='utf-8') as f:
-            lines = f.readlines()
-        
-        # Basic VTT parsing to extract just the text
-        text_lines = []
-        for line in lines:
-            # Skip metadata and timestamp lines
-            if '-->' not in line and not line.strip().isdigit() and line.strip() and not line.strip().startswith('WEBVTT') and not line.strip().startswith('Kind:'):
-                cleaned_line = re.sub(r'<[^>]+>', '', line).strip() # Remove VTT tags
-                text_lines.append(cleaned_line)
-        
-        print("Transcript fetched and parsed successfully.")
-        return " ".join(text_lines)
+        transcript_file = None
+        try:
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                # IMPORTANT: Download from the Invidious instance, not YouTube directly
+                invidious_url = f"{instance}/watch?v={video_id}"
+                ydl.download([invidious_url])
             
-    except Exception as e:
-        print(f"An error occurred with yt-dlp: {e}")
-        return None
-    finally:
-        # Clean up any downloaded transcript files
-        if transcript_file and os.path.exists(transcript_file):
-            os.remove(transcript_file)
-        # Also try to remove other possible filenames
-        for lang in ['en', 'es']:
-            potential_file = f"{video_id}.{lang}.vtt"
-            if os.path.exists(potential_file):
-                os.remove(potential_file)
+            # Find the downloaded file
+            for lang in ['en', 'es']:
+                expected_file = f"{video_id}.{lang}.vtt"
+                if os.path.exists(expected_file):
+                    transcript_file = expected_file
+                    break
+            
+            if not transcript_file:
+                print("Transcript file was not downloaded. Trying next instance.")
+                continue # Go to the next instance in the list
+
+            # Read and parse the VTT file
+            with open(transcript_file, 'r', encoding='utf-8') as f:
+                lines = f.readlines()
+            
+            # Basic VTT parsing to extract just the text
+            text_lines = []
+            for line in lines:
+                if '-->' not in line and not line.strip().isdigit() and line.strip() and not line.strip().startswith('WEBVTT'):
+                    cleaned_line = re.sub(r'<[^>]+>', '', line).strip()
+                    text_lines.append(cleaned_line)
+            
+            print("Transcript fetched and parsed successfully!")
+            return " ".join(text_lines)
+                
+        except Exception as e:
+            print(f"Instance failed: {e}. Trying next instance.")
+            continue # Go to the next instance
+        finally:
+            # Clean up any downloaded files
+            if transcript_file and os.path.exists(transcript_file):
+                os.remove(transcript_file)
+            for lang in ['en', 'es']:
+                potential_file = f"{video_id}.{lang}.vtt"
+                if os.path.exists(potential_file):
+                    os.remove(potential_file)
+
+    print("All Invidious instances failed.")
+    return None
 
 
 def summarize_text(text):
@@ -92,8 +110,7 @@ def summarize_text(text):
     api_url = "https://api-inference.huggingface.co/models/facebook/bart-large-cnn"
     headers = {"Authorization": f"Bearer {HUGGINGFACE_API_KEY}"} if HUGGINGFACE_API_KEY else {}
 
-    # Truncate text to avoid overly long inputs for the summarizer
-    max_input_length = 30000  # Generous character limit
+    max_input_length = 30000
     if len(text) > max_input_length:
         text = text[:max_input_length]
 
@@ -105,18 +122,15 @@ def summarize_text(text):
         "parameters": { "max_length": int(max_length), "min_length": int(min_length), "do_sample": False }
     }
     try:
-        response = requests.post(api_url, headers=headers, json=payload, timeout=180) # Increased timeout
+        response = requests.post(api_url, headers=headers, json=payload, timeout=180)
         if response.status_code == 200:
             return response.json()[0]['summary_text']
         else:
-            print(f"Error from Hugging Face API: {response.text}")
-            # Check for model loading error
             if isinstance(response.json(), dict) and 'error' in response.json():
                 return f"(Could not generate summary: {response.json()['error']})"
             return "(Could not generate summary due to API error.)"
     except Exception as e:
-        print(f"Error contacting Hugging Face: {e}")
-        return "(Could not generate summary due to connection error.)"
+        return f"(Could not generate summary due to connection error: {e})"
 
 
 def send_telegram_message(message):
@@ -137,8 +151,6 @@ def main():
         return
 
     print("Checking for new videos...")
-    print("Fetching feed from RSS.app URL...")
-
     response = requests.get(RSS_FEED_URL)
     feed = feedparser.parse(response.content)
     
@@ -148,7 +160,6 @@ def main():
 
     latest_video = feed.entries[0]
     latest_video_id = latest_video.link.split('v=')[-1]
-    
     last_processed_id = get_last_processed_video_id()
     
     print(f"Latest video in feed: {latest_video.title} ({latest_video_id})")
@@ -156,10 +167,9 @@ def main():
 
     if latest_video_id != last_processed_id:
         print("New video detected!")
-        
         transcript = get_video_transcript(video_id=latest_video_id)
         
-        if transcript and len(transcript.strip()) > 50: # Check for a meaningful transcript
+        if transcript and len(transcript.strip()) > 50:
             print("Generating summary...")
             summary = summarize_text(transcript)
             
@@ -172,12 +182,10 @@ def main():
             
             print("Sending message to Telegram...")
             send_telegram_message(message)
-            
             save_last_processed_video_id(latest_video_id)
             print("Process completed successfully!")
         else:
-            print("Could not get a valid transcript. No summary will be sent.")
-            # Optionally, send a notification without a summary
+            print("Could not get a valid transcript. Sending notification without summary.")
             message_no_summary = (
                 f"🚀 *New Video on Into The Cryptoverse!*\n\n"
                 f"*{latest_video.title}*\n\n"
@@ -186,8 +194,6 @@ def main():
             )
             send_telegram_message(message_no_summary)
             save_last_processed_video_id(latest_video_id)
-            print("Sent notification without summary.")
-
     else:
         print("No new videos found.")
 
