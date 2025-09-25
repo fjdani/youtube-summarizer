@@ -1,14 +1,14 @@
 import os
 import requests
 import feedparser
-from youtube_transcript_api import YouTubeTranscriptApi
+# --- CAMBIO 1: Importamos la función directamente ---
+from youtube_transcript_api import get_transcript
 
 # --- CONFIGURACIÓN ---
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
 TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
 HUGGINGFACE_API_KEY = os.environ.get("HUGGINGFACE_API_KEY")
 
-# Leemos la URL estable desde los secrets de GitHub
 RSS_FEED_URL = os.environ.get("RSS_URL")
 LAST_VIDEO_FILE = "last_video_id.txt"
 
@@ -27,7 +27,8 @@ def save_last_processed_video_id(video_id):
 
 def get_video_transcript(video_id):
     try:
-        transcript_list = YouTubeTranscriptApi.get_transcript(video_id, languages=['en', 'es'])
+        # --- CAMBIO 2: Llamamos a la función directamente ---
+        transcript_list = get_transcript(video_id, languages=['en', 'es'])
         return " ".join([item['text'] for item in transcript_list])
     except Exception as e:
         print(f"Error al obtener la transcripción: {e}")
@@ -80,7 +81,6 @@ def main():
         return
 
     latest_video = feed.entries[0]
-    # Extraemos el ID del video del link
     latest_video_id = latest_video.link.split('v=')[-1]
     
     last_processed_id = get_last_processed_video_id()
