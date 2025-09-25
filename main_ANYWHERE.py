@@ -7,7 +7,7 @@ from youtube_transcript_api import YouTubeTranscriptApi
 # Pega tus datos directamente aquí. Asegúrate de que estén entre las comillas.
 TELEGRAM_TOKEN = "8492260970:AAH9LDcnru8MqFCcB-7Kl7IlG9WaHO2tfIs"
 TELEGRAM_CHAT_ID = "481040187"
-RSS_FEED_URL = "PEGA_LA_URL_DE_RSS.APP_AQUÍ"
+RSS_FEED_URL = "https://rss.app/feeds/0Q2g5a7J2b8o7P3h.xml"
 
 # Opcional: Si quieres mejor calidad en los resúmenes, pega tu clave de Hugging Face.
 # Si no, déjalo como está.
