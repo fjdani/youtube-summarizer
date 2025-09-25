@@ -1,7 +1,6 @@
 import os
 import requests
 import feedparser
-import random
 from youtube_transcript_api import YouTubeTranscriptApi
 
 # --- CONFIGURACIÓN ---
@@ -9,10 +8,11 @@ TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
 TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
 HUGGINGFACE_API_KEY = os.environ.get("HUGGINGFACE_API_KEY")
 
-YOUTUBE_CHANNEL_ID = "UCRvqjQP_of_v2ubqXN-e2wQ"
+# Leemos la URL estable desde los secrets de GitHub
+RSS_FEED_URL = os.environ.get("RSS_URL")
 LAST_VIDEO_FILE = "last_video_id.txt"
 
-# --- FUNCIONES (Simplificadas) ---
+# --- FUNCIONES ---
 
 def get_last_processed_video_id():
     try:
@@ -65,40 +65,23 @@ def send_telegram_message(message):
 # --- LÓGICA PRINCIPAL ---
 
 def main():
+    if not RSS_FEED_URL:
+        print("Error: La variable RSS_URL no está configurada en los Secrets de GitHub.")
+        return
+
     print("Iniciando la revisión de nuevos videos...")
+    print(f"Obteniendo feed desde la URL de RSS.app...")
+
+    response = requests.get(RSS_FEED_URL)
+    feed = feedparser.parse(response.content)
     
-    # Lista curada de servidores Invidious. Si uno falla, probará el siguiente.
-    instance_list = [
-        "https://invidious.no-logs.org",
-        "https://vid.puffyan.us",
-        "https://invidious.incogniweb.net",
-        "https://invidious.protokolla.fi",
-        "https://yewtu.be"
-    ]
-    random.shuffle(instance_list) # Mezclamos para distribuir la carga
-    
-    feed = None
-    for instance_url in instance_list:
-        rss_feed_url = f"{instance_url}/feeds/videos.xml?channel_id={YOUTUBE_CHANNEL_ID}"
-        try:
-            print(f"Intentando obtener feed desde: {rss_feed_url}")
-            response = requests.get(rss_feed_url, timeout=15)
-            
-            if response.status_code == 200:
-                print("¡Feed obtenido con éxito!")
-                feed = feedparser.parse(response.content)
-                break # Salimos del bucle si tenemos éxito
-            else:
-                print(f"El servidor devolvió el estado: {response.status_code}. Intentando con el siguiente.")
-        except requests.exceptions.RequestException as e:
-            print(f"El servidor falló: {e}. Intentando con el siguiente.")
-    
-    if not feed or not feed.entries:
-        print("Todos los servidores fallaron o el feed está vacío. Saliendo.")
+    if not feed.entries:
+        print("El feed no contiene videos. Saliendo.")
         return
 
     latest_video = feed.entries[0]
-    latest_video_id = latest_video.get('yt_videoid', latest_video.get('id', '').split(':')[-1])
+    # Extraemos el ID del video del link
+    latest_video_id = latest_video.link.split('v=')[-1]
     
     last_processed_id = get_last_processed_video_id()
     
